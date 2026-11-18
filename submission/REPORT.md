@@ -1,18 +1,35 @@
-# Báo cáo Day 09 — <Họ và tên>, <MSHV>
-
-> Xoá mọi `TODO(học viên)` và dòng gợi ý. Mỗi ý trả lời bằng **số lấy từ `submission/reports/`**, kèm mẫu số. Cả báo cáo ~1–2 trang.
+# Báo cáo Day 09 — Nguyễn Thanh Thản, 2A202603202
 
 ## 1. Kết luận trước
-TODO(học viên): pipeline kết luận **Release / Hold / Rework**? Bao nhiêu ảnh vào, bao nhiêu ảnh ra dataset? Lý do chính (1–3 câu).
+Pipeline kết luận **HOLD** (mã thoát 10). Vào **224 ảnh** → loại 22 ở cửa vào → **202 ảnh** ra dataset `submission/export/clean_v1` (bản nháp, chưa phát hành).
+Không còn lỗi bắt buộc (0 ERROR trong `07_error_list_v3`), nhưng **29/202 ảnh (14,36%)** còn cảnh báo chưa được người duyệt, ≥ ngưỡng 10%: hàng đợi cần duyệt 118 ảnh mà ngân sách chỉ 80.
 
 ## 2. Lỗi và phân việc
-Lấy từ `02_error_list_v1` (gom theo mã lỗi). Cột "ai sửa": **máy** (autofix) hay **người** (hàng đợi); chỉ ghi những mã có mặt trong lô của bạn.
+Từ `02_error_list_v1` (trước khi sửa, 194 dòng lỗi trên 224 ảnh quét):
 
-| Mã lỗi | Số ảnh/dòng | Ai sửa (máy/người) | Vì sao |
+| Mã lỗi | Số dòng (số ảnh) | Ai sửa (máy/người) | Vì sao |
 |---|---:|---|---|
-| TODO(học viên) | | | |
+| CORRUPT_IMAGE | 2 (2) | máy — loại ảnh | không mở/load được, không dùng được để train |
+| BAD_SIZE | 3 (3) | máy — loại ảnh | cạnh ngắn < 250 px (quy tắc dự án) |
+| DUP_IMAGE_EXACT | 8 (8) | máy — loại ảnh | trùng từng byte (md5), chắc chắn |
+| DUP_IMAGE_NEAR | 4 (4) | máy — loại ảnh | phash ≤ 12, đã mở xem từng cặp (mục 3) |
+| LEAK_TEST | 5 (5) | máy — loại ảnh | trùng ảnh test/val: để lại là gian lận khi đo |
+| BAD_CLASS_NAME | 2 (data.yaml) | máy — ghi lại `names` | danh sách lớp là quy tắc cố định của dự án |
+| BAD_FORMAT | 3 (3) | máy — xoá dòng | dòng không đúng 5 cột số, không đoán được ý định |
+| BAD_CLASS_ID | 6 (6) | máy — xoá dòng | id ngoài 0..3, không biết lớp đúng |
+| BOX_ZERO | 4 (4) | máy — xoá dòng | box không có diện tích |
+| DUP_BOX | 7 (7) | máy — xoá dòng sau | cùng lớp, IoU > 0.9: box thừa |
+| BOX_OUT_OF_IMAGE | 8 (8) | máy — cắt box về [0,1] | sửa hình học, giữ nguyên lớp |
+| MISSING_LABEL_FILE | 6 (6) | **người** — gán nhãn | máy không được bịa nhãn (file rỗng = "ảnh nền") |
+| POSSIBLE_MISSING | 44 (43) | **người** | model lớn thấy vật mà nhãn không có — có thể model sai |
+| POSSIBLE_FALSE_POS | 29 (27) | **người** | box không khớp vật nào model thấy |
+| POSSIBLE_LOOSE_BOX | 22 (21) | **người** | đúng vật nhưng box lệch/lỏng |
+| POSSIBLE_WRONG_CLASS | 16 (16) | **người** | nhầm lớp hợp lệ (car/truck/bus) — chỉ người phân xử được |
+| EMPTY_LABEL / BOX_TINY / BOX_HUGE / CLASS_RARE | 12 / 6 / 3 / 4 | **người** (ưu tiên thấp) | ảnh nền hay thiếu nhãn? box nhỏ/lớn bất thường: cần nhìn |
 
-TODO(học viên): vì sao `05_review_queue.csv` xếp ảnh đầu hàng như vậy? Với ngân sách 80 ảnh, người xem được bao nhiêu lỗi ngữ nghĩa?
+Máy tự sửa **35 thay đổi** (`03_fixes.csv`: 20 `drop_line`, 8 `clip_box`, 1 `rename_classes`, 6 `needs_label`) + loại 22 ảnh; sau sửa (`04_error_list_v2`) chỉ còn 6 lỗi bắt buộc `MISSING_LABEL_FILE`.
+
+**Hàng đợi `05_review_queue.csv` (118 ảnh)** xếp theo tổng trọng số `review.weights` của các mã trên ảnh: đầu hàng là img_0020 (11.5: vừa bị xoá dòng, vừa MISSING + WRONG_CLASS), rồi 6 ảnh `NEEDS_LABEL` (trọng số 10 — không người gán thì chắc chắn Rework), sau đó các ảnh WRONG_CLASS (3) / MISSING (2). Với ngân sách 80 ảnh, người duyệt đã xem **tất cả** ảnh có POSSIBLE_MISSING (43/43) và WRONG_CLASS (16/16), cùng 6/6 ảnh thiếu nhãn, nhưng chỉ 13/21 ảnh LOOSE_BOX và 11/23 ảnh FALSE_POS; 38 ảnh cuối hàng (FALSE_POS, LOOSE_BOX, BOX_TINY…) không ai xem → 29 ảnh còn cảnh báo ở `07_error_list_v3`.
 
 ## 3. Calibration (2 ngưỡng)
 Số liệu từ `submission/calibration/calibration_report.md` (calib 39 ảnh) và từ chạy thử pipeline trên raw với từng cặp giá trị.
@@ -68,6 +85,9 @@ AP50 theo lớp (TB 2 seed, từ `*_seed*.json`): car 0.738 (raw) / 0.745 (clean
 **Việc tiếp theo:** chạy thêm seed (≥ 3), đo lại trên test bỏ ảnh rò rỉ, và chỉ kết luận "clean tốt hơn" khi chênh lệch vượt rõ độ lệch giữa các seed.
 
 ## 6. Quyết định và ghi chú AI
-TODO(học viên): (a) quyết định cuối; nếu Hold/Rework cần làm gì để thành Release? (b) Dùng AI viết code? Ghi 3 dòng: prompt chính, cách bạn kiểm code AI, 1 lần AI sai. Không dùng: ghi "không dùng".
+**(a) Quyết định: HOLD** — dataset `clean_v1` chỉ dùng thử nghiệm, chưa phát hành. Để thành **Release** cần đưa tỉ lệ ảnh còn cảnh báo chưa duyệt xuống < 10%, tức còn tối đa 20/202 ảnh: duyệt thêm ít nhất **9** ảnh trong 38 ảnh cuối hàng đợi (ngân sách ~89 thay vì 80 — trong lab ngân sách cố định nên phải xin thêm giờ duyệt, không được nới ngưỡng); đồng thời không được phát sinh lỗi bắt buộc mới. Nếu người duyệt không gán được 6 ảnh thiếu nhãn thì kết luận chuyển sang **Rework** (đã chứng minh ở mục 4a). Không đổi `second_opinion.conf` lên 0.8 chỉ để ra Release (mục 3).
 
-*(Thưởng +2, tùy chọn)* CVAT: lọc `width < 20`, ảnh/số box khớp, đối chiếu `BOX_TINY` (xem docs/CVAT_FILTER.md), 1 câu về `can_review`.
+**(b) Có dùng AI (Claude)** để viết 4 module, chạy calibrate/pipeline và soạn nháp báo cáo.
+- *Prompt chính:* đưa docstring của từng stub (đầu vào/đầu ra, bảng mã lỗi, bẫy), file test tương ứng, và yêu cầu: ngưỡng lấy từ `cfg`, không sửa `data/raw`, không viết cứng tên ảnh, dòng hỏng không làm script chết.
+- *Cách kiểm:* chạy `pytest` từng module rồi cả bộ (79/79), tự thử thêm ca dòng dính 2 lỗi, dòng trống giữa file, ảnh `.JPG`, chạy `autofix` 2 lần (idempotent); chạy pipeline 2 lần so md5 báo cáo; đối chiếu 3 ảnh tự xem (`viz_labels.py`) với `02_error_list_v1` / `05_review_queue`; mở xem từng cặp ảnh bị coi là trùng khi chọn `phash_dist`.
+- *Một lần AI sai:* khi đối chiếu ảnh, AI dự đoán img_0045 (box `car` trên người) sẽ bị cờ `POSSIBLE_WRONG_CLASS` và img_0060 bị cờ vì box lỏng (IoU < 0.5). Kiểm lại bằng dự đoán trong cache thì sai cả hai: img_0045 chỉ bị `LOOSE_BOX` (do box person bên cạnh chồng lên), img_0060 có IoU 0.84 với model nên không bị cờ — đã sửa báo cáo theo số đo thật và chuyển chúng thành điểm mù ở mục 4.
