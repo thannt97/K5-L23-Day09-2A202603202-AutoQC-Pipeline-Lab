@@ -48,10 +48,24 @@ Nhận xét: 3 lỗi nhìn thấy bằng mắt đều là lỗi **ngữ nghĩa**
 3. **Ảnh trùng biến đổi mạnh (crop)**: img_0084 ~ img_0074 là cùng một cảnh bị cắt, khoảng cách phash 16 > ngưỡng 12 → không bị loại (xem mục 3). Tăng ngưỡng lên 16 thì bắt được nhưng xoá nhầm 8 ảnh khác.
 4. **Ngân sách duyệt**: 118 ảnh cần duyệt nhưng chỉ có 80 → 29/202 ảnh (14,36%) còn cảnh báo chưa ai xem; các lỗi ngữ nghĩa trong đó (như img_0045) đi thẳng vào dataset nếu ép Release.
 
-## 5. Train: raw vs clean (tùy chọn, chấm riêng)
-Chưa train: ghi "chưa chạy" và lý do, rồi bỏ qua phần còn lại của mục này. Nếu đã train: dán bảng từ `submission/results/comparison.md` (model, epoch, seed, số ảnh train mỗi biến thể).
+## 5. Train: raw vs clean
+Chạy `notebooks/day09_train_compare.ipynb` trên Colab T4: **yolo26n.pt, 20 epoch, imgsz 640, batch 16, seed 0 và 1**; cùng val (`gold_val`, 40 ảnh) và cùng test (100 ảnh) cho cả hai biến thể. `clean` = `submission/export/clean_v1` (manifest sha1 `efbf5ef…`, khớp file trong repo), là bản xuất khi pipeline **Hold**. Bảng từ `submission/results/comparison.md`:
 
-TODO(học viên): chênh mAP50 (clean − raw) so với **độ lệch chuẩn giữa các seed**; kết luận **trung thực** (nằm trong nhiễu thì nói là chưa kết luận được); ≥ 2 giả thuyết giải thích (ảnh trùng/rò rỉ test trong `raw`, nhãn máy còn lại trong `clean`, test chỉ 100 ảnh…) và cách kiểm.
+| biến thể | #ảnh train | số seed | map50 (TB ± độ lệch) | map50_95 (TB ± độ lệch) | precision (TB ± độ lệch) | recall (TB ± độ lệch) |
+|---|---|---|---|---|---|---|
+| raw | 224 | 2 | 0.726 ± 0.000 | 0.512 ± 0.004 | 0.764 ± 0.061 | 0.649 ± 0.028 |
+| clean | 202 | 2 | 0.712 ± 0.012 | 0.489 ± 0.009 | 0.772 ± 0.054 | 0.627 ± 0.029 |
+
+AP50 theo lớp (TB 2 seed, từ `*_seed*.json`): car 0.738 (raw) / 0.745 (clean) · person 0.822 / 0.824 · **truck 0.648 / 0.556** · bus 0.695 / 0.725.
+
+**Kết luận: chưa kết luận được clean tốt hơn hay kém hơn raw.** Chênh mAP50 (clean − raw) = **−0.013**, cỡ bằng độ lệch giữa 2 seed của clean (0.012); precision/recall lệch giữa seed tới 0.03–0.06, lớn hơn chênh lệch giữa hai biến thể. mAP50-95 thấp hơn 0.023 (≈ 2–3 lần độ lệch seed) nhưng chỉ có 2 seed nên ước lượng độ lệch rất thô. Gần như toàn bộ chênh lệch đến từ lớp **truck** (−0.09); car/person gần như bằng nhau, bus clean còn nhỉnh hơn.
+
+**Giả thuyết và cách kiểm:**
+1. **Raw được "nhìn trước" tập test.** Pipeline loại 5 ảnh `LEAK_TEST` (trùng ảnh test: test_009, 033, 039, 044, 085) khỏi clean nhưng raw vẫn train trên chúng → điểm raw bị thổi phồng. *Kiểm:* đánh giá lại cả hai model trên test bỏ 5 ảnh này; nếu khoảng cách thu hẹp/đảo chiều thì đây là nguyên nhân.
+2. **Truck chỉ có 24 box trong test** → AP truck dao động mạnh theo vài box (2 seed của clean đã lệch 0.05). Clean thực ra có **nhiều** box truck hơn raw (40 so với 32, sau sửa tự động + người duyệt), nên −0.09 nhiều khả năng là nhiễu của lớp ít mẫu hoặc do định nghĩa truck/car không nhất quán (pickup). *Kiểm:* thêm seed (≥ 3–5), xem confusion matrix truck↔car trên test.
+3. **Clean ít ảnh hơn (202 so với 224, −10%)** và còn 29 ảnh có cảnh báo chưa được duyệt (nhãn máy lỗi ngữ nghĩa còn nguyên, như img_0045) → lợi ích làm sạch bị bù trừ bởi mất dữ liệu. *Kiểm:* train biến thể `oracle` (nhãn chuẩn) làm chặn trên; tăng ngân sách duyệt để đưa pipeline về Release rồi train lại.
+
+**Việc tiếp theo:** chạy thêm seed (≥ 3), đo lại trên test bỏ ảnh rò rỉ, và chỉ kết luận "clean tốt hơn" khi chênh lệch vượt rõ độ lệch giữa các seed.
 
 ## 6. Quyết định và ghi chú AI
 TODO(học viên): (a) quyết định cuối; nếu Hold/Rework cần làm gì để thành Release? (b) Dùng AI viết code? Ghi 3 dòng: prompt chính, cách bạn kiểm code AI, 1 lần AI sai. Không dùng: ghi "không dùng".
